@@ -222,10 +222,10 @@ The system includes a simple retrieval evaluation module that:
 **Issue**: `ValueError: Vector store is missing and no URL list provided, cannot build index`
 - **Solution**: Ensure `urls.txt` exists with at least one valid URL, or set `REBUILD_FLAG=True` in `.env` to rebuild the vector store.
 
-**Issue**: API connection errors
+**Issue**: `API connection errors`
 - **Solution**: Verify your `.env` file has correct `OPENAI_API_KEY` and `OPENAI_API_BASE` values. For ChatECNU, ensure you're using the correct campus API endpoints.
 
-**Issue**: FAISS index errors
+**Issue**: `FAISS index errors`
 - **Solution**: Delete the `wiki_vector_store/` directory and set `REBUILD_FLAG=True` in `.env` to rebuild the index.
 
 ### Performance Tips
