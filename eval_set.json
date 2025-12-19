@@ -1,0 +1,106 @@
+[
+  {
+    "question": "什么是检索增强生成（Retrieval-Augmented Generation, RAG）？",
+    "keywords": ["检索增强生成", "retrieval-augmented generation", "rag"]
+  },
+  {
+    "question": "一个典型的 RAG 系统架构主要包含哪些组件？",
+    "keywords": [
+      "retriever",
+      "generator",
+      "index",
+      "reranker",
+      "retrieval",
+      "检索器",
+      "生成器"
+    ]
+  },
+  {
+    "question": "RAG 流水线是如何将检索与生成两个阶段结合起来的？",
+    "keywords": [
+      "pipeline",
+      "retrieval",
+      "generation",
+      "combine",
+      "two-stage",
+      "两阶段",
+      "流水线"
+    ]
+  },
+  {
+    "question": "RAG 方法通常面临哪些挑战或局限？",
+    "keywords": [
+      "limitation",
+      "challenge",
+      "hallucination",
+      "coverage",
+      "挑战",
+      "局限"
+    ]
+  },
+  {
+    "question": "在 RAG 中常用的检索器类型有哪些？",
+    "keywords": [
+      "dense retriever",
+      "sparse retriever",
+      "bm25",
+      "dual encoder",
+      "稠密检索",
+      "稀疏检索"
+    ]
+  },
+  {
+    "question": "为什么在 RAG 系统中需要使用重排序（rerank）模块？",
+    "keywords": [
+      "re-ranking",
+      "rerank",
+      "relevance",
+      "top-k",
+      "quality",
+      "重排序"
+    ]
+  },
+  {
+    "question": "相比纯生成模型，RAG 是如何在一定程度上减轻幻觉（hallucination）问题的？",
+    "keywords": [
+      "hallucination",
+      "grounding",
+      "evidence",
+      "source document",
+      "幻觉"
+    ]
+  },
+  {
+    "question": "针对基于 RAG 的问答系统，通常会使用哪些评价指标？",
+    "keywords": [
+      "hit@k",
+      "exact match",
+      "f1",
+      "answer correctness",
+      "评测"
+    ]
+  },
+  {
+    "question": "RAG 在真实应用系统中通常被用在哪些场景？",
+    "keywords": [
+      "question answering",
+      "knowledge base",
+      "chatbot",
+      "search",
+      "问答",
+      "知识库"
+    ]
+  },
+  {
+    "question": "当前关于 RAG 的研究中提出了哪些值得关注的未来工作方向？",
+    "keywords": [
+      "future work",
+      "open problem",
+      "research direction",
+      "未来工作",
+      "研究方向"
+    ]
+  }
+]
+
+
