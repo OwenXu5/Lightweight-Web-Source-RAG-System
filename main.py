@@ -21,7 +21,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_API_BASE = os.getenv("OPENAI_API_BASE")
 VECTOR_DIR = os.getenv("VECTOR_DIR", "wiki_vector_store")
 
-# Step 1: 解压faiss向量库（若存在zip则解压）
+# Step 1: Extract FAISS vector store (if zip exists)
 VECTOR_INDEX_FILE = os.path.join(VECTOR_DIR, "faiss.index")
 ID2CONTENT_FILE = os.path.join(VECTOR_DIR, "id2content.pkl")
 ID2META_FILE = os.path.join(VECTOR_DIR, "id2meta.pkl")
@@ -42,15 +42,15 @@ def load_urls_from_file(path: str) -> List[str]:
                 continue
             urls.append(line)
     if not urls:
-        raise ValueError(f"文件 {path} 中没有有效的URL")
-    print(f"加载了 {len(urls)} 个URL")
+        raise ValueError(f"No valid URLs found in file {path}")
+    print(f"Loaded {len(urls)} URLs")
     return urls
 
 
 def load_web_documents(urls: List[str]):
-    """使用 WebBaseLoader 抓取网页为 Document 列表"""
+    """Load web pages as Document list using WebBaseLoader"""
     docs = []
-    for url in tqdm(urls, desc="加载网页文档"):
+    for url in tqdm(urls, desc="Loading web documents"):
         loader = WebBaseLoader(url)
         docs.extend(loader.load())
     return docs
@@ -64,7 +64,7 @@ def split_documents(documents, chunk_size: int = 800, chunk_overlap: int = 80):
 
 
 def embed_texts(texts: List[str], model: str = "ecnu-embedding-small") -> np.ndarray:
-    """批量获取文本向量，使用学校平台的embedding接口"""
+    """Batch get text embeddings using campus platform embedding API"""
     emb_client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE)
     response = emb_client.embeddings.create(input=texts, model=model)
     vectors = [item.embedding for item in response.data]
@@ -74,22 +74,22 @@ def embed_texts(texts: List[str], model: str = "ecnu-embedding-small") -> np.nda
 def build_faiss_from_documents(
     documents, chunk_size: int = 800, chunk_overlap: int = 80
 ) -> Tuple[faiss.IndexFlatL2, dict, dict, dict, dict]:
-    """从 Document 列表构建 FAISS 索引并返回映射"""
+    """Build FAISS index from Document list and return mappings"""
     splits = split_documents(
         documents, chunk_size=chunk_size, chunk_overlap=chunk_overlap
     )
-    print(f"分块后共 {len(splits)} 个片段")
+    print(f"Total {len(splits)} chunks after splitting")
     texts = [d.page_content for d in tqdm(splits)]
-    print(f"嵌入文本中...")
+    print(f"Embedding texts...")
     vectors = embed_texts(texts)
-    print(f"嵌入完成，向量维度: {vectors.shape[1]}")
+    print(f"Embedding completed, vector dimension: {vectors.shape[1]}")
 
-    # 建立 FAISS 索引
+    # Build FAISS index
     dim = vectors.shape[1]
     index = faiss.IndexFlatL2(dim)
     index.add(vectors)
 
-    # 构建映射
+    # Build mappings
     id2content = {i: text for i, text in enumerate(texts)}
     id2raw = id2content.copy()
     id2title = {i: d.metadata.get("source", "") for i, d in enumerate(splits)}
@@ -118,7 +118,7 @@ def save_vector_store(
 
 
 def ensure_vector_store(urls: Optional[List[str]] = None, rebuild: bool = False):
-    """确保向量库可用；缺失或指定rebuild时从URL重建"""
+    """Ensure vector store is available; rebuild from URLs if missing or rebuild flag is set"""
     files_exist = all(
         os.path.exists(p)
         for p in [
@@ -133,18 +133,20 @@ def ensure_vector_store(urls: Optional[List[str]] = None, rebuild: bool = False)
         return
 
     if not urls:
-        raise ValueError("向量库缺失且未提供 URL 列表，无法构建索引。")
+        raise ValueError(
+            "Vector store is missing and no URL list provided, cannot build index."
+        )
 
-    print("⚙️ 正在从网页重建向量库...")
+    print("⚙️ Rebuilding vector store from web pages...")
     documents = load_web_documents(urls)
     index, id2content, id2meta, id2raw, id2title = build_faiss_from_documents(documents)
     save_vector_store(index, id2content, id2meta, id2raw, id2title)
-    print("✅ 向量库已构建并保存到本地。")
+    print("✅ Vector store has been built and saved locally.")
 
 
-# Step 2: 加载Faiss索引和文档
+# Step 2: Load FAISS index and documents
 def load_faiss_index():
-    """加载FAISS索引和相关的文档数据"""
+    """Load FAISS index and related document data"""
     index = faiss.read_index(VECTOR_INDEX_FILE)
     with open(ID2CONTENT_FILE, "rb") as f:
         id2content = pickle.load(f)
@@ -158,29 +160,27 @@ def load_faiss_index():
     return index, id2content, id2meta, id2raw, id2title
 
 
-# 默认示例URL
-DEFAULT_URLS = [
-    "https://rag.deeptoai.com/docs/advanced-rag-intro/complete-rag-survey"
-]
+# Default example URLs
+DEFAULT_URLS = ["https://rag.deeptoai.com/docs/advanced-rag-intro/complete-rag-survey"]
 
 
-# Step 3: 获得Embedding方法（用学校平台 embedding 接口）
+# Step 3: Get embedding method
 def get_embedding(text, model="ecnu-embedding-small"):
     emb_client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE)
     response = emb_client.embeddings.create(input=text, model=model)
     return np.array(response.data[0].embedding, dtype=np.float32)
 
 
-# Step 4: 检索相关文档
+# Step 4: Retrieve relevant documents
 def search(query, top_k=15):
-    """搜索相关文档，返回文档内容列表和索引信息"""
+    """Search relevant documents, return document content list and index information"""
     query_emb = get_embedding(query)
     query_emb = np.expand_dims(query_emb, axis=0)
     D, I = index.search(query_emb, top_k)
     results = []
     indices = []
     for idx, distance in zip(I[0], D[0]):
-        # 尝试不同的索引格式（整数、字符串）
+        # Try different index formats (integer, string)
         content = None
         if idx in id2content:
             content = id2content[idx]
@@ -192,25 +192,25 @@ def search(query, top_k=15):
             content = id2raw[str(idx)]
         else:
             content = ""
-        if content:  # 只添加非空内容
+        if content:  # Only add non-empty content
             results.append(content)
             indices.append((idx, float(distance)))
     return results, indices
 
 
-# Step 4.5: Rerank 重排序模块
+# Step 4.5: Rerank module
 def rerank(query, documents, top_k=None, model="ecnu-rerank"):
     """
-    使用专用的rerank API对检索到的文档进行重排序
+    Re-rank retrieved documents using dedicated rerank API
 
     Args:
-        query: 查询问题
-        documents: 文档列表
-        top_k: 返回前k个最相关的文档，如果为None则返回全部
-        model: rerank模型名称，默认为"ecnu-rerank"
+        query: Query question
+        documents: Document list
+        top_k: Return top k most relevant documents, if None return all
+        model: Rerank model name, default is "ecnu-rerank"
 
     Returns:
-        重排序后的文档列表
+        Re-ranked document list
     """
     if not documents:
         return []
@@ -218,15 +218,15 @@ def rerank(query, documents, top_k=None, model="ecnu-rerank"):
     if len(documents) == 1:
         return documents
 
-    # 如果文档数量较少，直接返回
+    # If document count is small, return directly
     if len(documents) <= 2:
         if top_k is not None:
             return documents[:top_k]
         return documents
 
-    # 使用专用的rerank API
+    # Use dedicated rerank API
     try:
-        # 构建请求数据
+        # Build request data
         top_n = top_k if top_k is not None else len(documents)
 
         request_data = {
@@ -237,7 +237,7 @@ def rerank(query, documents, top_k=None, model="ecnu-rerank"):
             "top_n": top_n,
         }
 
-        # 使用httpx发送POST请求
+        # Send POST request using httpx
         with httpx.Client() as client:
             response = client.post(
                 f"{OPENAI_API_BASE}/rerank",
@@ -251,117 +251,117 @@ def rerank(query, documents, top_k=None, model="ecnu-rerank"):
             response.raise_for_status()
             result = response.json()
 
-        # 根据API响应格式提取重排序后的文档
+        # Extract re-ranked documents based on API response format
         if "results" in result and isinstance(result["results"], list):
-            # 按relevance_score排序（通常API已经排序，但为了安全起见再排序一次）
+            # Sort by relevance_score (API usually already sorted, but sort again for safety)
             sorted_results = sorted(
                 result["results"],
                 key=lambda x: x.get("relevance_score", 0),
                 reverse=True,
             )
 
-            # 如果return_documents=True，结果中可能包含文档内容
+            # If return_documents=True, results may contain document content
             reranked_docs = []
             for item in sorted_results:
-                # 优先使用返回的文档内容（如果存在）
+                # Prefer returned document content (if exists)
                 if "document" in item:
                     reranked_docs.append(item["document"])
                 elif "index" in item:
-                    # 否则使用索引从原始文档列表中获取
+                    # Otherwise use index to get from original document list
                     idx = item["index"]
                     if 0 <= idx < len(documents):
                         reranked_docs.append(documents[idx])
         elif "data" in result:
-            # 如果返回了文档列表，直接使用
+            # If document list is returned, use directly
             if isinstance(result["data"], list):
                 reranked_docs = result["data"]
             else:
                 reranked_docs = documents[:top_n] if top_k is not None else documents
         else:
-            # 如果格式不符合预期，使用原始顺序
+            # If format doesn't match expectation, use original order
             reranked_docs = documents[:top_n] if top_k is not None else documents
 
         return reranked_docs
 
     except Exception as e:
-        print(f"Rerank过程中出现错误: {e}，使用原始顺序")
-        # 如果rerank失败，返回原始顺序
+        print(f"Error occurred during rerank: {e}, using original order")
+        # If rerank fails, return original order
         if top_k is not None:
             return documents[:top_k]
         return documents
 
 
-# Step 5: 构造RAG调用LLM进行问答（流式输出）
+# Step 5: Construct RAG to call LLM for Q&A (streaming output)
 def retrieve_augmented_generation(
     question, top_k=10, rerank_top_k=5, use_rerank=True, chat_model="ecnu-max"
 ):
     """
-    检索增强生成（流式输出）
+    Retrieval-augmented generation (streaming output)
 
     Args:
-        question: 用户问题
-        top_k: 初始检索的文档数量
-        rerank_top_k: rerank后保留的文档数量，如果为None则使用top_k
-        use_rerank: 是否使用rerank模块
-        chat_model: 聊天模型名称
+        question: User question
+        top_k: Number of documents for initial retrieval
+        rerank_top_k: Number of documents to keep after rerank, if None use top_k
+        use_rerank: Whether to use rerank module
+        chat_model: Chat model name
 
     Yields:
-        str: 流式输出的文本块
+        str: Streaming output text chunks
     """
-    # 初始检索，获取更多候选文档用于rerank
+    # Initial retrieval, get more candidate documents for rerank
     initial_k = top_k * 2 if use_rerank else top_k
     top_docs, indices = search(question, top_k=initial_k)
 
-    # 使用rerank进行重排序
+    # Use rerank for reordering
     if use_rerank and len(top_docs) > 1:
         final_k = rerank_top_k if rerank_top_k is not None else top_k
         top_docs = rerank(question, top_docs, top_k=final_k)
     elif not use_rerank:
         top_docs = top_docs[:top_k]
 
-    # 过滤空内容
+    # Filter empty content
     top_docs = [doc for doc in top_docs if doc]
     context = "\n\n".join(top_docs)
     prompt = f"""
-    基于以下内容回答问题：
-    文档：{context}
+    Answer the question based on the following content:
+    Documents: {context}
     
-    问题：{question}
+    Question: {question}
     
-    答案：
+    Answer:
     """
     chat_client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE)
 
-    # 使用流式输出
+    # Use streaming output
     stream = chat_client.chat.completions.create(
         model="ecnu-max",
         messages=[
             {
                 "role": "system",
                 "content": """
-                你是一个AI助手，请基于给出的文档回答问题。
-                要求：
-                1. 只使用提供的文档内容
-                2. 如果文档中没有相关信息，明确说明
-                3. 引用具体的文档片段
-                4. 用简洁清晰的语言回答
+                You are an AI assistant, please answer questions based on the provided documents.
+                Requirements:
+                1. Only use the provided document content
+                2. If there is no relevant information in the documents, clearly state it
+                3. Cite specific document fragments
+                4. Answer in concise and clear language
                 """,
             },
             {"role": "user", "content": prompt},
         ],
-        stream=True,  # 启用流式输出
+        stream=True,  # Enable streaming output
     )
 
-    # 流式返回文本块
+    # Stream text chunks
     for chunk in stream:
         if chunk.choices[0].delta.content is not None:
             yield chunk.choices[0].delta.content
 
 
-# Step 6: 简单的检索评测（Hit@k）
+# Step 6: Simple retrieval evaluation (Hit@k)
 def run_retrieval_evaluation(top_k: int = 5):
     """
-    在固定问题集上，对检索阶段进行简单评测，计算 Hit@k。
+    Simple evaluation of retrieval stage on fixed question set, calculate Hit@k.
     """
 
     eval_file = "eval_set.json"
@@ -394,18 +394,18 @@ def run_retrieval_evaluation(top_k: int = 5):
         else:
             status = "Not Hit"
 
-        print(f"[{idx_q}/{num_questions}] Quesion: {q}")
+        print(f"[{idx_q}/{num_questions}] Question: {q}")
         print(f"    Answer: {status}")
 
     hit_at_k = hit_count / num_questions if num_questions > 0 else 0.0
-    print(f"\n✅ Hit@{top_k}: {hit_at_k:.3f} （{hit_count}/{num_questions}）\n")
+    print(f"\n✅ Hit@{top_k}: {hit_at_k:.3f} ({hit_count}/{num_questions})\n")
 
 
 if __name__ == "__main__":
-    url_file = "urls.txt"  # 你存放链接的文件
+    url_file = "urls.txt"  # File where you store links
 
     urls = load_urls_from_file(url_file) if os.path.isfile("urls.txt") else DEFAULT_URLS
-    ensure_vector_store(urls=urls, rebuild=REBUILD_FLAG)  # 重建向量库
+    ensure_vector_store(urls=urls, rebuild=REBUILD_FLAG)  # Rebuild vector store
     index, id2content, id2meta, id2raw, id2title = load_faiss_index()
     print("Welcome to the FAISS-based RAG QA system.")
     print("Two modes are available:")
@@ -415,18 +415,18 @@ if __name__ == "__main__":
 
     if mode == "2":
         try:
-            k_input = input("请输入评测使用的 k（默认 5）：").strip()
+            k_input = input("Enter k for evaluation (default 5): ").strip()
             top_k = int(k_input) if k_input else 5
         except ValueError:
             top_k = 5
         run_retrieval_evaluation(top_k=top_k)
     else:
         while True:
-            question = input("请输入你的问题（q退出）：")
+            question = input("Enter your question (q to quit): ")
             if question.strip().lower() == "q":
                 break
-            print("AI答案：", end="", flush=True)
-            # 流式输出答案
+            print("AI Answer: ", end="", flush=True)
+            # Stream answer output
             for chunk in retrieve_augmented_generation(question):
                 print(chunk, end="", flush=True)
-            print()  # 换行
+            print()  # Newline

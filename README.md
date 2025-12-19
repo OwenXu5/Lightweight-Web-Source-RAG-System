@@ -113,7 +113,7 @@ Two modes are available:
   1) Interactive QA
   2) Retrieval evaluation (Hit@k)
 Enter Mode Code (default: 1): 1
-请输入你的问题（q退出）：什么是检索增强生成？
+Enter your question (q to quit): What is Retrieval-Augmented Generation?
 ```
 
 ### Retrieval Evaluation
@@ -127,7 +127,7 @@ python main.py
 Select mode 2 and specify the value of `k`:
 ```
 Enter Mode Code (default: 1): 2
-请输入评测使用的 k（默认 5）：5
+Enter k for evaluation (default 5): 5
 ```
 
 The evaluation will iterate over all questions in `eval_set.json`, retrieve top-k documents for each query, and compute the Hit@k score based on keyword matching.
@@ -213,11 +213,14 @@ The system includes a simple retrieval evaluation module that:
 
 ### Common Issues
 
-**Issue**: `FileNotFoundError: 评测文件 eval_set.json 不存在`
+**Issue**: `FileNotFoundError: Evaluation file eval_set.json does not exist`
 - **Solution**: Ensure `eval_set.json` exists in the project root directory.
 
-**Issue**: `ValueError: 文件 urls.txt 中没有有效的URL`
+**Issue**: `ValueError: No valid URLs found in file urls.txt`
 - **Solution**: Add at least one valid URL to `urls.txt` (one per line, comments start with `#`).
+
+**Issue**: `ValueError: Vector store is missing and no URL list provided, cannot build index`
+- **Solution**: Ensure `urls.txt` exists with at least one valid URL, or set `REBUILD_FLAG=True` in `.env` to rebuild the vector store.
 
 **Issue**: API connection errors
 - **Solution**: Verify your `.env` file has correct `OPENAI_API_KEY` and `OPENAI_API_BASE` values. For ChatECNU, ensure you're using the correct campus API endpoints.
