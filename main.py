@@ -293,7 +293,7 @@ def rerank(query, documents, top_k=None, model="ecnu-rerank"):
 
 # Step 5: Construct RAG to call LLM for Q&A (streaming output)
 def retrieve_augmented_generation(
-    question, top_k=10, rerank_top_k=5, use_rerank=True, chat_model="ecnu-max"
+    question, top_k=10, rerank_top_k=8, use_rerank=True, chat_model="ecnu-max"
 ):
     """
     Retrieval-augmented generation (streaming output)
@@ -358,7 +358,41 @@ def retrieve_augmented_generation(
             yield chunk.choices[0].delta.content
 
 
-# Step 6: Simple retrieval evaluation (Hit@k)
+# Step 6: Get multiline input from user
+def get_multiline_input(prompt: str) -> str:
+    """
+    Get multiline input from user, end with two consecutive empty lines.
+
+    Args:
+        prompt: Prompt message to display
+
+    Returns:
+        str: The complete multiline input text
+    """
+    lines = []
+    print(prompt)
+    empty_line_count = 0
+
+    while True:
+        try:
+            line = input()
+            if line.strip() == "":
+                empty_line_count += 1
+                if empty_line_count >= 2:
+                    break
+            else:
+                empty_line_count = 0
+                lines.append(line)
+        except (EOFError, KeyboardInterrupt):
+            # Handle Ctrl+C or Ctrl+Z
+            if lines:
+                break
+            return ""
+
+    return "\n".join(lines)
+
+
+# Step 7: Simple retrieval evaluation (Hit@k)
 def run_retrieval_evaluation(top_k: int = 5):
     """
     Simple evaluation of retrieval stage on fixed question set, calculate Hit@k.
@@ -422,8 +456,10 @@ if __name__ == "__main__":
         run_retrieval_evaluation(top_k=top_k)
     else:
         while True:
-            question = input("Enter your question (q to quit): ")
-            if question.strip().lower() == "q":
+            question = get_multiline_input(
+                "Enter your question (End input with two blank lines，enter 'q' to quit): "
+            )
+            if not question.strip() or question.strip().lower() == "q":
                 break
             print("AI Answer: ", end="", flush=True)
             # Stream answer output

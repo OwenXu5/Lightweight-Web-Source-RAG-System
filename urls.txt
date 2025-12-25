@@ -1,1 +1,23 @@
+# Basics
+https://rag.deeptoai.com/docs/brag-tutorial/1-query-understanding-transformation
 https://rag.deeptoai.com/docs/advanced-rag-intro/complete-rag-survey
+https://rag.deeptoai.com/docs/advanced-rag-intro/introduction-to-rag
+https://rag.deeptoai.com/docs/advanced-rag-intro/interpretation
+
+# Advanced
+https://rag.deeptoai.com/docs/advanced-rag-intro/what-is-agentic-rag-bilingual
+https://rag.deeptoai.com/docs/advanced-rag-deep-dive/building-high-quality-rag-systems
+https://rag.deeptoai.com/docs/advanced-rag-deep-dive/advanced-rag-architecture
+https://rag.deeptoai.com/docs/advanced-rag-deep-dive/advanced-rag
+https://rag.deeptoai.com/docs/advanced-rag-deep-dive/why-rag-pipelines-fail
+https://rag.deeptoai.com/docs/advanced-rag-deep-dive/advance-rag-improve-rag-performance
+https://rag.deeptoai.com/docs/advanced-rag-deep-dive/rag-tuning-strategies
+https://rag.deeptoai.com/docs/advanced-rag-deep-dive/text-chunking-strategies
+https://rag.deeptoai.com/docs/advanced-rag-deep-dive/hyde-hypothetical-document-embeddings
+https://rag.deeptoai.com/docs/advanced-rag-deep-dive/multimodal-rag
+https://rag.deeptoai.com/docs/advanced-rag-deep-dive/huggingface-train-reranker
+https://rag.deeptoai.com/docs/advanced-rag-deep-dive/elasticsearch-rrf
+https://rag.deeptoai.com/docs/advanced-rag-deep-dive/neo4j-rag-tutorial
+
+# PostGre
+https://rag.deeptoai.com/docs/advanced-rag-deep-dive/postgres-hybrid-search
