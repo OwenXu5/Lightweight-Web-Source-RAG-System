@@ -198,6 +198,44 @@ def search(query, top_k=15):
     return results, indices
 
 
+# Step 4.3: HyDE - Generate hypothetical document
+def generate_hypothetical_document(question: str, chat_model: str = "ecnu-max") -> str:
+    """
+    Generate a hypothetical answer document for the given question using LLM.
+    This document will be used for retrieval instead of the original question.
+
+    Args:
+        question: User question
+        chat_model: Chat model name for generating hypothetical document
+
+    Returns:
+        str: Hypothetical answer document
+    """
+    chat_client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE)
+
+    prompt = f"""Please write a comprehensive answer to the following question. 
+Write it as if you are providing a detailed explanation or documentation that would answer this question.
+
+Question: {question}
+
+Answer (write as a detailed document):"""
+
+    response = chat_client.chat.completions.create(
+        model=chat_model,
+        messages=[
+            {
+                "role": "system",
+                "content": "You are a helpful assistant that generates detailed, informative answers to questions. Write comprehensive explanations that would serve as good reference documents.",
+            },
+            {"role": "user", "content": prompt},
+        ],
+        stream=False,
+    )
+
+    hypothetical_doc = response.choices[0].message.content
+    return hypothetical_doc
+
+
 # Step 4.5: Rerank module
 def rerank(query, documents, top_k=None, model="ecnu-rerank"):
     """
@@ -293,7 +331,12 @@ def rerank(query, documents, top_k=None, model="ecnu-rerank"):
 
 # Step 5: Construct RAG to call LLM for Q&A (streaming output)
 def retrieve_augmented_generation(
-    question, top_k=10, rerank_top_k=8, use_rerank=True, chat_model="ecnu-max"
+    question,
+    top_k=10,
+    rerank_top_k=8,
+    use_rerank=True,
+    use_hyde=False,
+    chat_model="ecnu-max",
 ):
     """
     Retrieval-augmented generation (streaming output)
@@ -303,14 +346,29 @@ def retrieve_augmented_generation(
         top_k: Number of documents for initial retrieval
         rerank_top_k: Number of documents to keep after rerank, if None use top_k
         use_rerank: Whether to use rerank module
+        use_hyde: Whether to use HyDE (Hypothetical Document Embeddings) method
         chat_model: Chat model name
 
     Yields:
         str: Streaming output text chunks
     """
+    # HyDE: Generate hypothetical document and use it for retrieval
+    retrieval_query = question
+    if use_hyde:
+        print(
+            "🔄 Generating hypothetical document for HyDE retrieval...",
+            end="",
+            flush=True,
+        )
+        hypothetical_doc = generate_hypothetical_document(
+            question, chat_model=chat_model
+        )
+        retrieval_query = hypothetical_doc
+        print(" ✅")
+
     # Initial retrieval, get more candidate documents for rerank
     initial_k = top_k * 2 if use_rerank else top_k
-    top_docs, indices = search(question, top_k=initial_k)
+    top_docs, indices = search(retrieval_query, top_k=initial_k)
 
     # Use rerank for reordering
     if use_rerank and len(top_docs) > 1:
@@ -354,7 +412,13 @@ def retrieve_augmented_generation(
 
     # Stream text chunks
     for chunk in stream:
-        if chunk.choices[0].delta.content is not None:
+        # Safely check if chunk has choices and content
+        if (
+            chunk.choices
+            and len(chunk.choices) > 0
+            and chunk.choices[0].delta
+            and chunk.choices[0].delta.content is not None
+        ):
             yield chunk.choices[0].delta.content
 
 
@@ -455,6 +519,17 @@ if __name__ == "__main__":
             top_k = 5
         run_retrieval_evaluation(top_k=top_k)
     else:
+        # Interactive QA mode - select retrieval method
+        print("\nSelect retrieval method:")
+        print("  1) Direct retrieval (default)")
+        print("  2) HyDE (Hypothetical Document Embeddings)")
+        print("  3) (Reserved for future methods)")
+        method_input = input("Enter method code (default: 1): ").strip()
+
+        use_hyde = method_input == "2"
+        method_name = "HyDE" if use_hyde else "Direct retrieval"
+        print(f"\n✅ Selected method: {method_name}\n")
+
         while True:
             question = get_multiline_input(
                 "Enter your question (End input with two blank lines，enter 'q' to quit): "
@@ -463,6 +538,6 @@ if __name__ == "__main__":
                 break
             print("AI Answer: ", end="", flush=True)
             # Stream answer output
-            for chunk in retrieve_augmented_generation(question):
+            for chunk in retrieve_augmented_generation(question, use_hyde=use_hyde):
                 print(chunk, end="", flush=True)
             print()  # Newline

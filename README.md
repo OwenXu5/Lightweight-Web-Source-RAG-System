@@ -29,6 +29,7 @@ python main.py
 - **Intelligent Chunking**: Text segmentation with configurable chunk size and overlap via `RecursiveCharacterTextSplitter`
 - **Vector Indexing**: FAISS-based dense vector search with persistent storage
 - **Neural Re-ranking**: Optional re-ranking module using campus rerank API
+- **HyDE (Hypothetical Document Embeddings)**: Optional retrieval method that generates hypothetical answer documents to improve query semantics
 - **Streaming Generation**: Real-time answer generation with streaming output
 - **Evaluation Module**: Hit@k retrieval evaluation with JSON-configured query sets
 
@@ -113,8 +114,21 @@ Two modes are available:
   1) Interactive QA
   2) Retrieval evaluation (Hit@k)
 Enter Mode Code (default: 1): 1
-Enter your question (q to quit): What is Retrieval-Augmented Generation?
+
+Select retrieval method:
+  1) Direct retrieval (default)
+  2) HyDE (Hypothetical Document Embeddings)
+  3) (Reserved for future methods)
+Enter method code (default: 1): 2
+
+✅ Selected method: HyDE
+
+Enter your question (End input with two blank lines，enter 'q' to quit): What is Retrieval-Augmented Generation?
 ```
+
+**Retrieval Methods:**
+- **Method 1 (Direct retrieval)**: Uses the original question directly for vector search
+- **Method 2 (HyDE)**: First generates a hypothetical answer document using LLM, then uses that document for retrieval. This can improve retrieval quality for short or ambiguous queries by enriching the query semantics.
 
 ### Retrieval Evaluation
 
@@ -177,7 +191,9 @@ Example:
 2. **Text Segmentation**: Documents are split into overlapping chunks (default: 800 chars, 80 overlap)
 3. **Embedding**: Each chunk is embedded using campus embedding API (`ecnu-embedding-small`)
 4. **Indexing**: Vectors are stored in FAISS `IndexFlatL2` with L2 distance
-5. **Retrieval**: Query embeddings are used to find top-k nearest neighbors
+5. **Query Processing**: 
+   - **Direct retrieval**: Query embeddings are used directly to find top-k nearest neighbors
+   - **HyDE (optional)**: LLM first generates a hypothetical answer document, then uses that document's embedding for retrieval
 6. **Re-ranking**: Optional neural re-ranking via campus rerank API
 7. **Generation**: LLM generates answers based on retrieved context with streaming output
 
@@ -189,8 +205,9 @@ Example:
 - `embed_texts()`: Batch embedding via campus API
 - `build_faiss_from_documents()`: Construct FAISS index from documents
 - `search()`: Retrieve top-k documents for a query
+- `generate_hypothetical_document()`: Generate hypothetical answer document for HyDE method
 - `rerank()`: Neural re-ranking of retrieved documents
-- `retrieve_augmented_generation()`: End-to-end RAG with streaming output
+- `retrieve_augmented_generation()`: End-to-end RAG with streaming output (supports HyDE)
 - `run_retrieval_evaluation()`: Compute Hit@k over evaluation set
 
 ## Evaluation
@@ -234,11 +251,32 @@ The system includes a simple retrieval evaluation module that:
 - Use `REBUILD_FLAG=False` after initial setup to avoid unnecessary rebuilds
 - The system caches embeddings and index files, so subsequent runs are faster
 
+## Advanced Features
+
+### HyDE (Hypothetical Document Embeddings)
+
+HyDE is an advanced retrieval technique that improves query understanding by generating hypothetical answer documents. Instead of directly searching with the user's question, HyDE:
+
+1. **Generates a hypothetical answer**: Uses LLM to create a comprehensive answer document that would answer the user's question
+2. **Retrieves with the hypothetical document**: Uses the embedding of this hypothetical document to search the vector store
+3. **Benefits**: Particularly effective for short, ambiguous, or keyword-sparse queries by enriching the semantic representation
+
+**When to use HyDE:**
+- Short or incomplete questions
+- Ambiguous queries that need semantic enrichment
+- When direct retrieval yields poor results
+
+**Trade-offs:**
+- Adds one additional LLM call (for generating the hypothetical document)
+- May improve retrieval quality for certain types of queries
+- Slightly increases latency due to the generation step
+
 ## Future Work
 
 - Incremental index updates for new documents
 - Support for multiple document formats (PDF, CSV, etc.)
 - More sophisticated re-ranking and context compression
+- Additional retrieval methods (e.g., query expansion, multi-query retrieval)
 - Systematic evaluation metrics (exact match, F1, etc.)
 - Enhanced safety filters and hallucination detection
 - More interpretable evidence presentation
