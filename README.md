@@ -18,17 +18,19 @@ This project implements a complete pipeline:
 ## ✨ Features
 
 - **Web Interface**:
-    - **Modern UI**: React + Tailwind CSS + Framer Motion (Glassmorphism design).
-    - **Streaming Chat**: Real-time answer generation using NDJSON.
-    - **Source Viewer**: Transparently view the exact text chunks the AI is reading.
-    - **Dynamic Configuration**: Manage URLs, Toggle HyDE, and adjust Top-K/Rerank settings directly from the UI.
+    - **Modern UI**: Built with React + Tailwind CSS + Framer Motion.
+    - **Multi-turn Chat History**: Manage sessions in the sidebar (create, delete, auto-rename).
+    - **Streaming Chat**: Real-time Typewriter effect using NDJSON.
+    - **Source Viewer**: Transparently view cited text chunks. History playback **restores original sources**.
+    - **Dynamic Configuration**: Manage URLs, toggle Search Modes, and adjust parameters in UI.
 - **Robust Backend**:
     - **FastAPI**: High-performance async API.
-    - **SSL/Encoding Fixes**: Custom scraper handles `gbk`/`utf-8` decoding and bypasses SSL issues.
+    - **Hybrid Search**: Combines **BM25 Keyword Search** + **Vector Semantic Search** using **RRF (Reciprocal Rank Fusion)**, significantly improving retrieval for specific terms.
+    - **Persistence**: SQLite (`chat.db`) stores all chat history and retrieval context automatically.
     - **Vector Store**: Persistent FAISS index.
 - **Advanced RAG**:
-    - **HyDE**: Hypothetical Document Embeddings for better semantic matching.
-    - **Rerank**: Neural re-ranking to refine retrieval results.
+    - **HyDE**: Hypothetical Document Embeddings.
+    - **Rerank**: Neural re-ranking.
 
 ## 🚀 Quick Start
 
@@ -44,7 +46,7 @@ This project implements a complete pipeline:
 git clone https://github.com/OwenXu5/Lightweight-Web-Source-RAG-System.git
 cd Lightweight-Web-Source-RAG-System
 
-# Install Python dependencies
+# Install Python dependencies (added rank_bm25, jieba)
 pip install -r requirements.txt
 
 # Configure Environment
@@ -79,36 +81,36 @@ npm run dev
 | Variable | Description |
 |----------|-------------|
 | `OPENAI_API_KEY` | **Required**. Your API Key. |
-| `OPENAI_API_BASE` | **Required**. API Base URL (e.g., campus API). |
+| `OPENAI_API_BASE` | **Required**. API Base URL. |
 | `VECTOR_DIR` | Directory to store FAISS index (default: `wiki_vector_store`). |
 | `REBUILD_FLAG` | Set to `True` to force rebuild on startup. |
-| `USER_AGENT` | Custom User-Agent for scraper (optional, defaults provided). |
 
 ### Web Interface Settings
 
 You can adjust these dynamically in the Sidebar:
 
-- **Knowledge Base URLs**: Add/Remove URLs to scrape. Click **Rebuild Index** to apply changes.
-- **HyDE**: Toggle Hypothetical Document Embeddings.
-- **Rerank**: Toggle neural re-ranking (slower but more accurate).
-- **Top-K**: Number of documents to retrieve.
+- **Knowledge Base URLs**: Add/Remove URLs. Click **Rebuild Index** to apply.
+- **Search Mode**:
+    - **Hybrid Search (Default)**: Combines BM25 & Vector Search for best results.
+    - **HyDE**: Hypothetical Document Embeddings for short/ambiguous queries.
+- **Rerank**: Toggle neural re-ranking.
+- **Top-K**: Number of retrieved documents.
 
 ## 📁 Project Structure
 
 ```
 .
-├── api.py               # FastAPI Backend Entrypoint
-├── main.py              # Core RAG Logic (Ingestion, Search, LLM)
+├── api.py               # FastAPI Backend (w/ SQLite Session Mgmt)
+├── main.py              # Core RAG (BM25, FAISS, RRF, Rerank)
+├── chat.db              # SQLite Database (Chat History)
 ├── requirements.txt     # Python Dependencies
-├── .env                 # API Credentials (ignored by git)
-├── urls.txt             # Initial URL list
-└── frontend/            # React Application
+├── .env                 # API Credentials
+├── urls.txt             # URL List
+└── frontend/            # React App
     ├── src/
     │   ├── components/  # ChatInterface, Sidebar, SourceViewer
-    │   ├── App.tsx      # Main Layout
-    │   └── lib/utils.ts # Utility functions
-    ├── tailwind.config.js
-    └── vite.config.ts
+    │   └── App.tsx      # Main Logic
+    └── ...
 ```
 
 ## 📝 Troubleshooting

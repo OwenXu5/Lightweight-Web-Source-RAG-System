@@ -18,17 +18,19 @@
 ## ✨ 主要特性
 
 - **Web 界面**：
-    - **现代化 UI**：使用 React + Tailwind CSS + Framer Motion 构建（玻璃拟态设计）。
-    - **流式对话**：使用 NDJSON 协议实现的实时流式回答生成。
-    - **来源查看器**：透明地展示 AI 参考的具体文本片段。
-    - **动态配置**：直接在 UI 中管理 URL、切换 HyDE 模式、调整 Top-K 和重排序设置。
+    - **现代化 UI**：使用 React + Tailwind CSS + Framer Motion 构建。
+    - **多轮对话历史**：侧边栏管理所有历史会话，支持创建新对话、删除对话和自动重命名。
+    - **流式对话**：实时流式输出，打字机效果。
+    - **来源查看器**：透明展示 AI 参考的具体文本片段，历史记录回溯时也会**同步加载**当时的参考来源。
+    - **动态配置**：在 UI 中管理 URL、切换检索模式（HyDE/Hybrid）、调整参数。
 - **健壮的后端**：
-    - **FastAPI**：高性能的异步 API 框架。
-    - **SSL/编码修复**：自定义抓取器，自动处理 `gbk`/`utf-8` 解码并绕过 SSL 证书问题。
+    - **FastAPI**：高性能异步 API。
+    - **混合检索 (Hybrid Search)**：结合 **BM25 关键词检索** + **向量语义检索**，使用 **RRF (Reciprocal Rank Fusion)** 算法融合排序，大幅提升生僻词和专有名词的召回率。
+    - **持久化存储**：使用 SQLite (`chat.db`) 自动保存所有对话记录和检索上下文。
     - **向量存储**：持久化的 FAISS 索引。
 - **高级 RAG 技术**：
-    - **HyDE**：生成假设性文档以增强语义匹配，特别适合短查询。
-    - **Rerank**：使用神经重排序模型对检索结果进行精细化排序。
+    - **HyDE**：生成假设性文档以增强语义匹配。
+    - **Rerank**：神经重排序模型。
 
 ## 🚀 快速开始
 
@@ -44,7 +46,7 @@
 git clone https://github.com/OwenXu5/Lightweight-Web-Source-RAG-System.git
 cd Lightweight-Web-Source-RAG-System
 
-# 安装 Python 依赖
+# 安装 Python 依赖 (新增 rank_bm25, jieba)
 pip install -r requirements.txt
 
 # 配置环境变量
@@ -79,36 +81,36 @@ npm run dev
 | 变量名 | 描述 |
 |----------|-------------|
 | `OPENAI_API_KEY` | **必需**。你的 API Key。 |
-| `OPENAI_API_BASE` | **必需**。API 基础地址 (例如校园网 API)。 |
+| `OPENAI_API_BASE` | **必需**。API 基础地址。 |
 | `VECTOR_DIR` | 存储 FAISS 索引的目录 (默认: `wiki_vector_store`)。 |
 | `REBUILD_FLAG` | 设置为 `True` 则在启动时强制重建索引。 |
-| `USER_AGENT` | 爬虫使用的自定义 User-Agent (可选，有默认值)。 |
 
 ### Web 界面设置
 
 你可以在侧边栏中动态调整这些设置：
 
-- **知识库 URL (Knowledge Base)**：添加/删除要抓取的 URL。修改后点击 **Rebuild Index** 生效。
-- **HyDE**：开关假设性文档嵌入功能。
-- **Rerank**：开关神经重排序功能（更准但稍慢）。
-- **Top-K**：设置每次检索召回的文档数量。
+- **Knowledge Base URLs**：添加/删除 URL。修改后点击 **Rebuild Index** 生效。
+- **Search Mode**：
+    - **Hybrid Search (默认)**：同时使用 BM25 和向量检索，效果最好。
+    - **HyDE**：假设性文档嵌入，适合短查询。
+- **Rerank**：重排序开关。
+- **Top-K**：召回数量。
 
 ## 📁 项目结构
 
 ```
 .
-├── api.py               # FastAPI 后端入口
-├── main.py              # 核心 RAG 逻辑 (抓取, 搜索, LLM)
+├── api.py               # FastAPI 后端 (含 SQLite 会话管理)
+├── main.py              # RAG 核心 (BM25, FAISS, RRF, Rerank)
+├── chat.db              # SQLite 数据库 (存储聊天记录)
 ├── requirements.txt     # Python 依赖
-├── .env                 # API 凭证 (git 忽略)
-├── urls.txt             # 初始 URL 列表
-└── frontend/            # React 前端应用
+├── .env                 # 配置文件
+├── urls.txt             # URL 列表
+└── frontend/            # React 前端
     ├── src/
     │   ├── components/  # 组件 (ChatInterface, Sidebar, SourceViewer)
-    │   ├── App.tsx      # 主布局
-    │   └── lib/utils.ts # 工具函数
-    ├── tailwind.config.js
-    └── vite.config.ts
+    │   └── App.tsx      # 主应用逻辑
+    └── ...
 ```
 
 ## 📝 故障排除
