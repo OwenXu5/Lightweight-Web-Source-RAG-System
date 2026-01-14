@@ -49,10 +49,41 @@ def load_urls_from_file(path: str) -> List[str]:
 
 def load_web_documents(urls: List[str]):
     """Load web pages as Document list using WebBaseLoader"""
+    # Set User-Agent to avoid blocking
+    if not os.getenv("USER_AGENT"):
+        os.environ["USER_AGENT"] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    
     docs = []
+    # Suppress SSL warnings
+    import urllib3
+    import requests
+    from bs4 import BeautifulSoup
+    from langchain_core.documents import Document
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    
+    headers = {"User-Agent": os.environ["USER_AGENT"]}
+
     for url in tqdm(urls, desc="Loading web documents"):
-        loader = WebBaseLoader(url)
-        docs.extend(loader.load())
+        try:
+            # Custom load with forced UTF-8
+            resp = requests.get(url, headers=headers, verify=False, timeout=30)
+            # Force UTF-8 encoding to fix garbled characters
+            resp.encoding = "utf-8"
+            
+            soup = BeautifulSoup(resp.text, "html.parser")
+            
+            # Remove script and style elements
+            for script in soup(["script", "style"]):
+                script.decompose()
+                
+            text = soup.get_text(separator="\n\n", strip=True)
+            title = soup.title.string if soup.title else url
+            
+            docs.append(Document(page_content=text, metadata={"source": url, "title": title}))
+            
+        except Exception as e:
+            print(f"Error loading {url}: {e}")
+            continue
     return docs
 
 
@@ -65,7 +96,7 @@ def split_documents(documents, chunk_size: int = 800, chunk_overlap: int = 80):
 
 def embed_texts(texts: List[str], model: str = "ecnu-embedding-small") -> np.ndarray:
     """Batch get text embeddings using campus platform embedding API"""
-    emb_client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE)
+    emb_client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE, http_client=httpx.Client(verify=False))
     response = emb_client.embeddings.create(input=texts, model=model)
     vectors = [item.embedding for item in response.data]
     return np.array(vectors, dtype=np.float32)
@@ -166,7 +197,7 @@ DEFAULT_URLS = ["https://rag.deeptoai.com/docs/advanced-rag-intro/complete-rag-s
 
 # Step 3: Get embedding method
 def get_embedding(text, model="ecnu-embedding-small"):
-    emb_client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE)
+    emb_client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE, http_client=httpx.Client(verify=False))
     response = emb_client.embeddings.create(input=text, model=model)
     return np.array(response.data[0].embedding, dtype=np.float32)
 
@@ -199,6 +230,41 @@ def search(query, top_k=15):
 
 
 # Step 4.3: HyDE - Generate hypothetical document
+def contextualize_query(question: str, history: List[dict], chat_model: str = "ecnu-max") -> str:
+    """
+    Rewrite the question to be standalone based on chat history.
+    """
+    if not history:
+        return question
+        
+    chat_client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE, http_client=httpx.Client(verify=False))
+
+    # Construct conversation string
+    history_str = ""
+    for msg in history[-5:]: # Use last 5 turns
+        role = "User" if msg["role"] == "user" else "Assistant"
+        history_str += f"{role}: {msg['content']}\n"
+
+    prompt = f"""Given a chat history and the latest user question which might reference context in the chat history, formulate a standalone question which can be understood without the chat history. Do NOT answer the question, just rewrite it if needed, otherwise return it as is.
+
+Chat History:
+{history_str}
+
+Latest Question: {question}
+
+Standalone Question:"""
+
+    response = chat_client.chat.completions.create(
+        model=chat_model,
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant that rewrites questions to be standalone."},
+            {"role": "user", "content": prompt},
+        ],
+        stream=False,
+    )
+
+    return response.choices[0].message.content.strip()
+
 def generate_hypothetical_document(question: str, chat_model: str = "ecnu-max") -> str:
     """
     Generate a hypothetical answer document for the given question using LLM.
@@ -211,7 +277,8 @@ def generate_hypothetical_document(question: str, chat_model: str = "ecnu-max") 
     Returns:
         str: Hypothetical answer document
     """
-    chat_client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE)
+
+    chat_client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE, http_client=httpx.Client(verify=False))
 
     prompt = f"""Please write a comprehensive answer to the following question. 
 Write it as if you are providing a detailed explanation or documentation that would answer this question.
@@ -276,7 +343,7 @@ def rerank(query, documents, top_k=None, model="ecnu-rerank"):
         }
 
         # Send POST request using httpx
-        with httpx.Client() as client:
+        with httpx.Client(verify=False) as client:
             response = client.post(
                 f"{OPENAI_API_BASE}/rerank",
                 json=request_data,
@@ -388,7 +455,8 @@ def retrieve_augmented_generation(
     
     Answer:
     """
-    chat_client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE)
+
+    chat_client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE, http_client=httpx.Client(verify=False))
 
     # Use streaming output
     stream = chat_client.chat.completions.create(

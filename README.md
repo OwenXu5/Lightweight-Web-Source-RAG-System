@@ -1,312 +1,134 @@
 # Lightweight Web-Source RAG System
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
+[![React](https://img.shields.io/badge/React-18.0+-61dafb.svg)](https://react.dev/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-009688.svg)](https://fastapi.tiangolo.com/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-A lightweight retrieval-augmented generation (RAG) system built on top of a campus large-language-model (LLM) platform ChatECNU. This project implements a complete pipeline from web data ingestion and document chunking to FAISS-based vector indexing, neural re-ranking, and streaming answer generation. The system is specifically designed to work with web-based sources, automatically fetching and processing web pages to build a knowledge base for question answering. Also applicable for other LLM, embedding and reranking APIs (needs further configuration, check `.env.example`).
+A lightweight retrieval-augmented generation (RAG) system with a modern Web Interface, built on top of a campus large-language-model (LLM) platform ChatECNU.
 
-## Quick Start
+This project implements a complete pipeline:
+1.  **Ingestion**: Authenticated web scraping (fixing garbled text) & chunking.
+2.  **Indexing**: FAISS-based vector storage.
+3.  **Retrieval**: Dense vector search + optional Neural Rerank + HyDE.
+4.  **Interface**: Streaming Chat UI with real-time source citation.
+
+[中文文档](README_CN.md)
+
+## ✨ Features
+
+- **Web Interface**:
+    - **Modern UI**: React + Tailwind CSS + Framer Motion (Glassmorphism design).
+    - **Streaming Chat**: Real-time answer generation using NDJSON.
+    - **Source Viewer**: Transparently view the exact text chunks the AI is reading.
+    - **Dynamic Configuration**: Manage URLs, Toggle HyDE, and adjust Top-K/Rerank settings directly from the UI.
+- **Robust Backend**:
+    - **FastAPI**: High-performance async API.
+    - **SSL/Encoding Fixes**: Custom scraper handles `gbk`/`utf-8` decoding and bypasses SSL issues.
+    - **Vector Store**: Persistent FAISS index.
+- **Advanced RAG**:
+    - **HyDE**: Hypothetical Document Embeddings for better semantic matching.
+    - **Rerank**: Neural re-ranking to refine retrieval results.
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Python 3.8+
+- Node.js & npm (for frontend)
+- API Key for ChatECNU (or compatible OpenAI-format API)
+
+### 1. Backend Setup
 
 ```bash
 # Clone the repository
 git clone https://github.com/OwenXu5/Lightweight-Web-Source-RAG-System.git
 cd Lightweight-Web-Source-RAG-System
 
-# Install dependencies
+# Install Python dependencies
 pip install -r requirements.txt
 
-# Configure environment (copy .env.example to .env and fill in your API keys)
+# Configure Environment
 cp .env.example .env
-# Edit .env with your credentials
+# EDIT .env file with your OPENAI_API_KEY and OPENAI_API_BASE!
 
-# Run the system
-python main.py
+# Start the Backend Server
+python api.py
 ```
+> Server runs at: `http://localhost:8000`
 
-## Features
+### 2. Frontend Setup
 
-- **Web Document Ingestion**: Automatically fetch and process web pages using LangChain's `WebBaseLoader`
-- **Intelligent Chunking**: Text segmentation with configurable chunk size and overlap via `RecursiveCharacterTextSplitter`
-- **Vector Indexing**: FAISS-based dense vector search with persistent storage
-- **Neural Re-ranking**: Optional re-ranking module using campus rerank API
-- **HyDE (Hypothetical Document Embeddings)**: Optional retrieval method that generates hypothetical answer documents to improve query semantics
-- **Streaming Generation**: Real-time answer generation with streaming output
-- **Evaluation Module**: Hit@k retrieval evaluation with JSON-configured query sets
+Open a new terminal window:
+```bash
+cd frontend
 
-## Project Structure
+# Install Node dependencies
+npm install
+
+# Start Development Server
+npm run dev
+```
+> App runs at: `http://localhost:5173`
+
+---
+
+## 🛠 Configuration
+
+### Environment Variables (`.env`)
+
+| Variable | Description |
+|----------|-------------|
+| `OPENAI_API_KEY` | **Required**. Your API Key. |
+| `OPENAI_API_BASE` | **Required**. API Base URL (e.g., campus API). |
+| `VECTOR_DIR` | Directory to store FAISS index (default: `wiki_vector_store`). |
+| `REBUILD_FLAG` | Set to `True` to force rebuild on startup. |
+| `USER_AGENT` | Custom User-Agent for scraper (optional, defaults provided). |
+
+### Web Interface Settings
+
+You can adjust these dynamically in the Sidebar:
+
+- **Knowledge Base URLs**: Add/Remove URLs to scrape. Click **Rebuild Index** to apply changes.
+- **HyDE**: Toggle Hypothetical Document Embeddings.
+- **Rerank**: Toggle neural re-ranking (slower but more accurate).
+- **Top-K**: Number of documents to retrieve.
+
+## 📁 Project Structure
 
 ```
 .
-├── main.py              # Main RAG pipeline implementation
-├── requirements.txt     # Python dependencies
-├── urls.txt            # Configuration file for web sources (one URL per line)
-├── eval_set.json       # Evaluation query set with questions and keywords
-├── .env                # Environment variables (API keys, base URLs, etc.) - not tracked by git
-├── .env.example        # Example environment variables template
-├── .gitignore          # Git ignore rules
-└── wiki_vector_store/  # Vector index and mappings (auto-generated)
-    ├── faiss.index
-    ├── id2content.pkl
-    ├── id2meta.pkl
-    ├── id2raw.pkl
-    └── id2title.pkl
+├── api.py               # FastAPI Backend Entrypoint
+├── main.py              # Core RAG Logic (Ingestion, Search, LLM)
+├── requirements.txt     # Python Dependencies
+├── .env                 # API Credentials (ignored by git)
+├── urls.txt             # Initial URL list
+└── frontend/            # React Application
+    ├── src/
+    │   ├── components/  # ChatInterface, Sidebar, SourceViewer
+    │   ├── App.tsx      # Main Layout
+    │   └── lib/utils.ts # Utility functions
+    ├── tailwind.config.js
+    └── vite.config.ts
 ```
 
-## Installation
+## 📝 Troubleshooting
 
-### Prerequisites
+**1. "Connection Error" or SSL Issues**
+- Ensure your `.env` has the correct `OPENAI_API_BASE`.
+- The system is configured to verify SSL `False` by default for internal compatibility.
 
-- Python 3.8 or higher
-- Access to campus LLM platform API (for embeddings, reranking, and chat)
+**2. Chinese Characters are Garbled (Mojibake)**
+- Click **Rebuild Index** in the web UI.
+- The updated scraper forces UTF-8 decoding to fix this.
 
-### Setup
+**3. Frontend cannot connect to Backend**
+- Ensure `python api.py` is running.
+- Check if port 8000 is occupied.
 
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/OwenXu5/Lightweight-Web-Source-RAG-System.git
-   cd Lightweight-Web-Source-RAG-System
-   ```
+## 🤝 Contribution
 
-2. **Install dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
+Feel free to open issues or PRs!
 
-3. **Configure environment variables**:
-   
-   Copy `.env.example` to `.env` and fill in your API credentials:
-   ```bash
-   cp .env.example .env
-   ```
-   
-   Then edit `.env` with your actual values:
-   ```env
-   OPENAI_API_KEY=your_api_key_here
-   OPENAI_API_BASE=https://your-campus-api-base-url
-   VECTOR_DIR=wiki_vector_store
-   REBUILD_FLAG=False
-   ```
-   
-   **Note**: For ChatECNU users, use the campus API endpoints. For other LLM platforms (OpenAI, Anthropic, etc.), adjust `OPENAI_API_BASE` accordingly.
+## 📄 License
 
-4. **Configure web sources**:
-   
-   Edit `urls.txt` and add one URL per line (lines starting with `#` are treated as comments):
-   ```
-   https://rag.deeptoai.com/docs/advanced-rag-intro/complete-rag-survey
-   # Add more URLs here
-   ```
-
-## Usage
-
-### Interactive Question Answering
-
-Run the main script and select mode 1 for interactive QA:
-
-```bash
-python main.py
-```
-
-Then follow the prompts:
-```
-Welcome to the FAISS-based RAG QA system.
-Two modes are available:
-  1) Interactive QA
-  2) Retrieval evaluation (Hit@k)
-Enter Mode Code (default: 1): 1
-
-Select retrieval method:
-  1) Direct retrieval (default)
-  2) HyDE (Hypothetical Document Embeddings)
-  3) (Reserved for future methods)
-Enter method code (default: 1): 2
-
-✅ Selected method: HyDE
-
-Enter your question (End input with two blank lines，enter 'q' to quit): What is Retrieval-Augmented Generation?
-```
-
-**Retrieval Methods:**
-- **Method 1 (Direct retrieval)**: Uses the original question directly for vector search
-- **Method 2 (HyDE)**: First generates a hypothetical answer document using LLM, then uses that document for retrieval. This can improve retrieval quality for short or ambiguous queries by enriching the query semantics.
-
-### Retrieval Evaluation
-
-To run the Hit@k evaluation on the configured query set:
-
-```bash
-python main.py
-```
-
-Select mode 2 and specify the value of `k`:
-```
-Enter Mode Code (default: 1): 2
-Enter k for evaluation (default 5): 5
-```
-
-The evaluation will iterate over all questions in `eval_set.json`, retrieve top-k documents for each query, and compute the Hit@k score based on keyword matching.
-
-### Rebuilding the Vector Store
-
-To rebuild the vector index from scratch, set `REBUILD_FLAG=True` in your `.env` file:
-
-```env
-REBUILD_FLAG=True
-```
-
-Alternatively, delete the `wiki_vector_store/` directory and the system will automatically rebuild on the next run.
-
-## Configuration
-
-### Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `OPENAI_API_KEY` | API key for campus LLM platform | Required |
-| `OPENAI_API_BASE` | Base URL for campus LLM platform | Required |
-| `VECTOR_DIR` | Directory for storing vector index | `wiki_vector_store` |
-| `REBUILD_FLAG` | Whether to rebuild vector store | `False` |
-
-### Evaluation Set Format
-
-The `eval_set.json` file should contain a list of question objects, each with:
-- `question`: Natural language question string
-- `keywords`: List of keywords that approximate the gold answer
-
-Example:
-```json
-[
-  {
-    "question": "什么是检索增强生成（Retrieval-Augmented Generation, RAG）？",
-    "keywords": ["检索增强生成", "retrieval-augmented generation", "rag"]
-  }
-]
-```
-
-## Implementation Details
-
-### Pipeline Overview
-
-1. **Data Ingestion**: URLs from `urls.txt` are fetched using `WebBaseLoader`
-2. **Text Segmentation**: Documents are split into overlapping chunks (default: 800 chars, 80 overlap)
-3. **Embedding**: Each chunk is embedded using campus embedding API (`ecnu-embedding-small`)
-4. **Indexing**: Vectors are stored in FAISS `IndexFlatL2` with L2 distance
-5. **Query Processing**: 
-   - **Direct retrieval**: Query embeddings are used directly to find top-k nearest neighbors
-   - **HyDE (optional)**: LLM first generates a hypothetical answer document, then uses that document's embedding for retrieval
-6. **Re-ranking**: Optional neural re-ranking via campus rerank API
-7. **Generation**: LLM generates answers based on retrieved context with streaming output
-
-### Key Functions
-
-- `load_urls_from_file()`: Load URLs from configuration file
-- `load_web_documents()`: Fetch web pages using LangChain
-- `split_documents()`: Text chunking with overlap
-- `embed_texts()`: Batch embedding via campus API
-- `build_faiss_from_documents()`: Construct FAISS index from documents
-- `search()`: Retrieve top-k documents for a query
-- `generate_hypothetical_document()`: Generate hypothetical answer document for HyDE method
-- `rerank()`: Neural re-ranking of retrieved documents
-- `retrieve_augmented_generation()`: End-to-end RAG with streaming output (supports HyDE)
-- `run_retrieval_evaluation()`: Compute Hit@k over evaluation set
-
-## Evaluation
-
-The system includes a simple retrieval evaluation module that:
-- Reads queries from `eval_set.json`
-- Retrieves top-k documents for each query
-- Checks keyword presence in retrieved chunks (case-insensitive)
-- Computes Hit@k as the fraction of queries with at least one matching keyword
-
-## Limitations
-
-- Single-document corpus scope (can be extended via `urls.txt`)
-- Full-refresh vector store rebuild (no incremental updates)
-- Keyword-based evaluation approximation (not true answer correctness)
-- Memory-bound FAISS index (no compression or approximate search)
-- Basic safety constraints (no fine-grained content filtering)
-
-## Troubleshooting
-
-### Common Issues
-
-**Issue**: `FileNotFoundError: Evaluation file eval_set.json does not exist`
-- **Solution**: Ensure `eval_set.json` exists in the project root directory.
-
-**Issue**: `ValueError: No valid URLs found in file urls.txt`
-- **Solution**: Add at least one valid URL to `urls.txt` (one per line, comments start with `#`).
-
-**Issue**: `ValueError: Vector store is missing and no URL list provided, cannot build index`
-- **Solution**: Ensure `urls.txt` exists with at least one valid URL, or set `REBUILD_FLAG=True` in `.env` to rebuild the vector store.
-
-**Issue**: `API connection errors`
-- **Solution**: Verify your `.env` file has correct `OPENAI_API_KEY` and `OPENAI_API_BASE` values. For ChatECNU, ensure you're using the correct campus API endpoints.
-
-**Issue**: `FAISS index errors`
-- **Solution**: Delete the `wiki_vector_store/` directory and set `REBUILD_FLAG=True` in `.env` to rebuild the index.
-
-### Performance Tips
-
-- For large web pages, consider adjusting `chunk_size` and `chunk_overlap` in `split_documents()` function
-- Use `REBUILD_FLAG=False` after initial setup to avoid unnecessary rebuilds
-- The system caches embeddings and index files, so subsequent runs are faster
-
-## Advanced Features
-
-### HyDE (Hypothetical Document Embeddings)
-
-HyDE is an advanced retrieval technique that improves query understanding by generating hypothetical answer documents. Instead of directly searching with the user's question, HyDE:
-
-1. **Generates a hypothetical answer**: Uses LLM to create a comprehensive answer document that would answer the user's question
-2. **Retrieves with the hypothetical document**: Uses the embedding of this hypothetical document to search the vector store
-3. **Benefits**: Particularly effective for short, ambiguous, or keyword-sparse queries by enriching the semantic representation
-
-**When to use HyDE:**
-- Short or incomplete questions
-- Ambiguous queries that need semantic enrichment
-- When direct retrieval yields poor results
-
-**Trade-offs:**
-- Adds one additional LLM call (for generating the hypothetical document)
-- May improve retrieval quality for certain types of queries
-- Slightly increases latency due to the generation step
-
-## Future Work
-
-- Incremental index updates for new documents
-- Support for multiple document formats (PDF, CSV, etc.)
-- More sophisticated re-ranking and context compression
-- Additional retrieval methods (e.g., query expansion, multi-query retrieval)
-- Systematic evaluation metrics (exact match, F1, etc.)
-- Enhanced safety filters and hallucination detection
-- More interpretable evidence presentation
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Acknowledgments
-
-- Built on top of [LangChain](https://github.com/langchain-ai/langchain) for document loading and text splitting
-- Uses [FAISS](https://github.com/facebookresearch/faiss) for efficient vector similarity search
-- Designed for use with ChatECNU campus LLM platform
-
-## Citation
-
-If you use this code in your research, please cite:
-
-```bibtex
-@misc{lightweight-web-rag,
-  title={Lightweight Web-Source RAG System},
-  author={Xu, Weisheng},
-  year={2024},
-  url={https://github.com/OwenXu5/Lightweight-Web-Source-RAG-System}
-}
-```
-
-## Contact
-
-- Email: xu8wei9sheng@gmail.com
-- GitHub: [@OwenXu5](https://github.com/OwenXu5)
-- Repository: [Lightweight-Web-Source-RAG-System](https://github.com/OwenXu5/Lightweight-Web-Source-RAG-System)
-
+MIT License.
