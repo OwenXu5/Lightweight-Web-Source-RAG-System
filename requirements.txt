@@ -9,3 +9,5 @@ langchain-community==0.4.1
 fastapi
 uvicorn
 pydantic
+rank_bm25
+jieba

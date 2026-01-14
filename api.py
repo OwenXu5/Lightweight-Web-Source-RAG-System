@@ -67,9 +67,67 @@ class SystemState:
             main.index = self.index 
             main.id2content = self.id2content
             main.id2raw = self.id2raw
+            
+            # Build BM25 Index
+            main.build_bm25_index(self.id2content)
+            
             print("System resources loaded successfully.")
         except Exception as e:
             print(f"Error loading resources: {e}")
+
+# ... (rest of code)
+
+class ChatRequest(BaseModel):
+    message: str
+    history: List[dict] = []  # List of {role: str, content: str}
+    session_id: Optional[str] = None
+    use_hyde: bool = False
+    top_k: int = 10
+    rerank_top_k: int = 8
+    use_rerank: bool = True
+    use_hybrid: bool = True # Enable Hybrid Search by default
+
+@app.post("/chat")
+async def chat_endpoint(request: ChatRequest):
+    # ... (existing variables)
+    message = request.message
+    history = request.history
+    session_id = request.session_id
+    use_hyde = request.use_hyde
+    use_hybrid = request.use_hybrid
+    
+    # ... (session handling logic) ...
+
+    async def response_generator():
+        # ... (contextualization logic) ...
+        # 1. Contextualize query with history if available
+        retrieval_query = message
+        if history:
+             try:
+                retrieval_query = main.contextualize_query(message, history)
+                print(f"Contextualized query: {retrieval_query}")
+             except Exception as e:
+                print(f"Contextualization error: {e}")
+
+        # 2. HyDE
+        if use_hyde:
+             try:
+                hypothetical_doc = main.generate_hypothetical_document(retrieval_query)
+                retrieval_query = hypothetical_doc
+             except Exception as e:
+                print(f"HyDE error: {e}")
+
+        # 3. Retrieval (Hybrid or Standard)
+        initial_k = request.top_k * 2 if request.use_rerank else request.top_k
+        
+        if use_hybrid:
+            print(f"Executing Hybrid Search for: {retrieval_query}")
+            top_docs, indices = main.hybrid_search(retrieval_query, top_k=initial_k)
+        else:
+            top_docs, indices = main.search(retrieval_query, top_k=initial_k)
+        
+        # 4. Rerank
+        # ... (rest of logic)
 
     def rebuild_index(self):
         main.REBUILD_FLAG = True
