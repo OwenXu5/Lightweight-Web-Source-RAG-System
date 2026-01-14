@@ -49,10 +49,41 @@ def load_urls_from_file(path: str) -> List[str]:
 
 def load_web_documents(urls: List[str]):
     """Load web pages as Document list using WebBaseLoader"""
+    # Set User-Agent to avoid blocking
+    if not os.getenv("USER_AGENT"):
+        os.environ["USER_AGENT"] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    
     docs = []
+    # Suppress SSL warnings
+    import urllib3
+    import requests
+    from bs4 import BeautifulSoup
+    from langchain_core.documents import Document
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    
+    headers = {"User-Agent": os.environ["USER_AGENT"]}
+
     for url in tqdm(urls, desc="Loading web documents"):
-        loader = WebBaseLoader(url)
-        docs.extend(loader.load())
+        try:
+            # Custom load with forced UTF-8
+            resp = requests.get(url, headers=headers, verify=False, timeout=30)
+            # Force UTF-8 encoding to fix garbled characters
+            resp.encoding = "utf-8"
+            
+            soup = BeautifulSoup(resp.text, "html.parser")
+            
+            # Remove script and style elements
+            for script in soup(["script", "style"]):
+                script.decompose()
+                
+            text = soup.get_text(separator="\n\n", strip=True)
+            title = soup.title.string if soup.title else url
+            
+            docs.append(Document(page_content=text, metadata={"source": url, "title": title}))
+            
+        except Exception as e:
+            print(f"Error loading {url}: {e}")
+            continue
     return docs
 
 
@@ -65,7 +96,7 @@ def split_documents(documents, chunk_size: int = 800, chunk_overlap: int = 80):
 
 def embed_texts(texts: List[str], model: str = "ecnu-embedding-small") -> np.ndarray:
     """Batch get text embeddings using campus platform embedding API"""
-    emb_client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE)
+    emb_client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE, http_client=httpx.Client(verify=False))
     response = emb_client.embeddings.create(input=texts, model=model)
     vectors = [item.embedding for item in response.data]
     return np.array(vectors, dtype=np.float32)
@@ -166,21 +197,52 @@ DEFAULT_URLS = ["https://rag.deeptoai.com/docs/advanced-rag-intro/complete-rag-s
 
 # Step 3: Get embedding method
 def get_embedding(text, model="ecnu-embedding-small"):
-    emb_client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE)
+    emb_client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE, http_client=httpx.Client(verify=False))
     response = emb_client.embeddings.create(input=text, model=model)
     return np.array(response.data[0].embedding, dtype=np.float32)
 
 
 # Step 4: Retrieve relevant documents
+from rank_bm25 import BM25Okapi
+import jieba
+
+# BM25 Index (Valid in memory)
+bm25 = None
+bm25_documents = [] # corresponding text content
+
+def build_bm25_index(id2content: dict):
+    """
+    Build BM25 index from id2content mapping.
+    Note: dict/index alignment is critical. id2content keys are usually 0..N-1.
+    """
+    global bm25, bm25_documents
+    print("Building BM25 index...")
+    documents = []
+    # Ensure order matches indices 0, 1, 2...
+    # id2content keys are integers from 0 to len(id2content)-1
+    sorted_keys = sorted([k for k in id2content.keys() if isinstance(k, int)])
+    
+    tokenized_corpus = []
+    for k in sorted_keys:
+        doc_text = id2content[k]
+        documents.append(doc_text)
+        # Tokenize (using jieba for simple mixed Chinese/English support)
+        tokens = list(jieba.cut_for_search(doc_text))
+        tokenized_corpus.append(tokens)
+    
+    bm25_documents = documents # Store strictly ordered list
+    bm25 = BM25Okapi(tokenized_corpus)
+    print(f"BM25 index built with {len(documents)} documents.")
+
+# Step 4: Retrieve relevant documents
 def search(query, top_k=15):
-    """Search relevant documents, return document content list and index information"""
+    """Search relevant documents using Vector Search only"""
     query_emb = get_embedding(query)
     query_emb = np.expand_dims(query_emb, axis=0)
     D, I = index.search(query_emb, top_k)
     results = []
     indices = []
     for idx, distance in zip(I[0], D[0]):
-        # Try different index formats (integer, string)
         content = None
         if idx in id2content:
             content = id2content[idx]
@@ -192,13 +254,126 @@ def search(query, top_k=15):
             content = id2raw[str(idx)]
         else:
             content = ""
-        if content:  # Only add non-empty content
+        if content:
             results.append(content)
             indices.append((idx, float(distance)))
     return results, indices
 
+def search_bm25(query: str, top_k: int = 15):
+    """Search relevant documents using BM25"""
+    if bm25 is None:
+        return [], []
+    
+    tokenized_query = list(jieba.cut_for_search(query))
+    # Get scores
+    doc_scores = bm25.get_scores(tokenized_query)
+    # Get top_k indices
+    top_n = np.argsort(doc_scores)[::-1][:top_k]
+    
+    results = []
+    indices = [] # (index, score)
+    for idx in top_n:
+        if idx < len(bm25_documents) and doc_scores[idx] > 0: # Filter zero scores
+            results.append(bm25_documents[idx])
+            indices.append((idx, float(doc_scores[idx])))
+            
+    return results, indices
+
+def hybrid_search(query: str, top_k: int = 15, vector_weight: float = 0.5):
+    """
+    Hybrid search combining Vector Search and BM25 using RRF (Reciprocal Rank Fusion).
+    RRF score = 1 / (k + rank)
+    """
+    # 1. Get results from both
+    # We ask for a bit more candidates to ensure good fusion
+    candidate_k = top_k * 2 
+    
+    query_emb = get_embedding(query)
+    query_emb = np.expand_dims(query_emb, axis=0)
+    vec_D, vec_I = index.search(query_emb, candidate_k)
+    
+    # Run BM25
+    bm25_results, bm25_scores_tuples = search_bm25(query, candidate_k)
+    
+    # 2. Compute RRF Ranks
+    # Map index -> RRF score
+    # RRF constant k
+    rrf_k = 60
+    doc_scores = {}
+    
+    # Vector Ranks (0 is best)
+    for rank, idx in enumerate(vec_I[0]):
+        if idx == -1: continue
+        if idx not in doc_scores: doc_scores[idx] = 0.0
+        doc_scores[idx] += 1.0 / (rrf_k + rank + 1)
+        
+    # BM25 Ranks 
+    # bm25_scores_tuples contains (doc_idx, score), sorted by score desc
+    for rank, (idx, score) in enumerate(bm25_scores_tuples):
+        if idx not in doc_scores: doc_scores[idx] = 0.0
+        doc_scores[idx] += 1.0 / (rrf_k + rank + 1)
+    
+    # 3. Sort by RRF score
+    sorted_indices = sorted(doc_scores.items(), key=lambda item: item[1], reverse=True)
+    
+    # 4. Get content
+    results = []
+    final_indices = []
+    
+    count = 0
+    for idx, score in sorted_indices:
+        if count >= top_k: break
+        
+        # Resolve content
+        content = ""
+        if idx in id2content: content = id2content[idx]
+        elif str(idx) in id2content: content = id2content[str(idx)]
+        # ... check raw/others if needed, usually id2content is enough
+        
+        if content:
+            results.append(content)
+            final_indices.append((idx, score)) # Returning RRF score here
+            count += 1
+            
+    return results, final_indices
+
 
 # Step 4.3: HyDE - Generate hypothetical document
+def contextualize_query(question: str, history: List[dict], chat_model: str = "ecnu-max") -> str:
+    """
+    Rewrite the question to be standalone based on chat history.
+    """
+    if not history:
+        return question
+        
+    chat_client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE, http_client=httpx.Client(verify=False))
+
+    # Construct conversation string
+    history_str = ""
+    for msg in history[-5:]: # Use last 5 turns
+        role = "User" if msg["role"] == "user" else "Assistant"
+        history_str += f"{role}: {msg['content']}\n"
+
+    prompt = f"""Given a chat history and the latest user question which might reference context in the chat history, formulate a standalone question which can be understood without the chat history. Do NOT answer the question, just rewrite it if needed, otherwise return it as is.
+
+Chat History:
+{history_str}
+
+Latest Question: {question}
+
+Standalone Question:"""
+
+    response = chat_client.chat.completions.create(
+        model=chat_model,
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant that rewrites questions to be standalone."},
+            {"role": "user", "content": prompt},
+        ],
+        stream=False,
+    )
+
+    return response.choices[0].message.content.strip()
+
 def generate_hypothetical_document(question: str, chat_model: str = "ecnu-max") -> str:
     """
     Generate a hypothetical answer document for the given question using LLM.
@@ -211,7 +386,8 @@ def generate_hypothetical_document(question: str, chat_model: str = "ecnu-max") 
     Returns:
         str: Hypothetical answer document
     """
-    chat_client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE)
+
+    chat_client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE, http_client=httpx.Client(verify=False))
 
     prompt = f"""Please write a comprehensive answer to the following question. 
 Write it as if you are providing a detailed explanation or documentation that would answer this question.
@@ -276,7 +452,7 @@ def rerank(query, documents, top_k=None, model="ecnu-rerank"):
         }
 
         # Send POST request using httpx
-        with httpx.Client() as client:
+        with httpx.Client(verify=False) as client:
             response = client.post(
                 f"{OPENAI_API_BASE}/rerank",
                 json=request_data,
@@ -388,7 +564,8 @@ def retrieve_augmented_generation(
     
     Answer:
     """
-    chat_client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE)
+
+    chat_client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE, http_client=httpx.Client(verify=False))
 
     # Use streaming output
     stream = chat_client.chat.completions.create(
